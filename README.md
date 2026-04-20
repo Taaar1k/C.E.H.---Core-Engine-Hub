@@ -8,7 +8,7 @@
 
 ---
 
-## 📋 Overview
+## Overview
 
 C.E.H. is a **fully local** agent framework that runs powerful large language models (LLMs) on your machine using **GGUF quantized models** via [`llama.cpp`](https://github.com/ggerganov/llama.cpp). It is designed for users who want:
 
@@ -29,7 +29,7 @@ C.E.H. is a **fully local** agent framework that runs powerful large language mo
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 C.E.H. follows a **sequential scaling** approach:
 
