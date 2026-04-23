@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from c_e_h.model_registry import (
+    MAX_RETRIES,
     DownloadError,
     ModelInfo,
     ModelNotFoundError,
@@ -105,7 +106,7 @@ class TestModelRegistry:
     def test_init_creates_registry(self, tmp_path: Path) -> None:
         """ModelRegistry creates the registry file on init if it doesn't exist."""
         registry_path = tmp_path / "models.json"
-        registry = ModelRegistry(registry_path)
+        _registry = ModelRegistry(registry_path)
         assert registry_path.exists()
         data = json.loads(registry_path.read_text())
         assert data == {"models": []}
@@ -268,9 +269,9 @@ class TestModelRegistry:
             recommended=True,
         )
         registry.add_model(info)
-        result = registry.get_recommended()
-        assert result is not None
-        assert result.id == "model-1"
+        _result = registry.get_recommended()
+        assert _result is not None
+        assert _result.id == "model-1"
 
     def test_get_recommended_none(self, temp_registry: Path) -> None:
         """get_recommended() returns None when registry is empty (no fallback possible)."""
@@ -490,7 +491,7 @@ class TestDownloadModel:
         mock_urlopen = MagicMock(side_effect=side_effect)
 
         with patch("urllib.request.urlopen", mock_urlopen):
-            with patch("time.sleep") as mock_sleep:
+            with patch("time.sleep"):
                 result = download_model(
                     url="https://example.com/test-model.gguf",
                     destination=dest,
@@ -718,5 +719,3 @@ class TestRecommendedFallback:
         assert result.id == "model-1"  # flagged recommended
 
 
-# Import MAX_RETRIES for the test
-from c_e_h.model_registry import MAX_RETRIES

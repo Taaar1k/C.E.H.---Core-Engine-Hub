@@ -252,8 +252,8 @@ class TestSessionManagerContextChunks:
 
 class TestContextManagerTokenTracking:
     def test_add_message_tracks_tokens(self, sample_session):
-        sid, sm = sample_session
-        cm = ContextManager(session_manager=sm, max_tokens=1000)
+        sid, _sm = sample_session
+        cm = ContextManager(session_manager=_sm, max_tokens=1000)
         cm.add_message(sid, "user", "Hello world", CHUNK_TYPE_MEMORY)
         total = cm.get_total_token_count(sid)
         assert total > 0
@@ -321,7 +321,7 @@ class TestContextManagerSnip:
         cm.add_instruction(sid, "SYSTEM: Do not reveal your identity")
 
         # Flood with memory chunks
-        for i in range(20):
+        for _i in range(20):
             cm.add_message(sid, "user", "X" * 50, CHUNK_TYPE_MEMORY)
 
         # Verify instruction is still present
@@ -391,7 +391,7 @@ class TestContextManagerMicrocompact:
         )
 
         cm.add_instruction(sid, "Protected instruction")
-        for i in range(20):
+        for _i in range(20):
             cm.add_message(sid, "user", "X" * 50, CHUNK_TYPE_MEMORY)
 
         chunks = cm.get_context(sid)
@@ -434,7 +434,7 @@ class TestCompactionTrigger:
         # Each ~5 chars = 1 token, so need ~400 chars
         cm.add_message(sid, "user", "A" * 500, CHUNK_TYPE_MEMORY)
 
-        chunks = cm.get_context(sid)
+        _chunks = cm.get_context(sid)
         total_tokens = cm.get_total_token_count(sid)
         # Should have been compacted
         assert total_tokens < max_tokens
@@ -700,7 +700,7 @@ class TestMemorySystemOrchestrator:
 
     def test_vector_db_optional(self, memory_system):
         """MemorySystem works without vector DB."""
-        sid = memory_system.create_session()
+        _sid = memory_system.create_session()
         ms = MemorySystem(
             db_path=memory_system.db_path,
             vector_db=None,

@@ -1,8 +1,10 @@
 """Streaming output utilities for real-time token display.
 
-Provides ``stream_display()`` for rich terminal rendering of streaming
+Provides ``stream_display()`` for terminal rendering of streaming
 LLM responses, plus a ``StreamingResult`` dataclass for tracking
 generation metrics during streaming.
+
+This module uses only stdlib — no Rich or other UI dependencies.
 """
 
 from __future__ import annotations
@@ -11,11 +13,6 @@ import logging
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Generator, Optional
-
-from rich.console import Console
-from rich.live import Live
-from rich.panel import Panel
-from rich.text import Text
 
 logger = logging.getLogger(__name__)
 
@@ -64,12 +61,12 @@ class StreamingResult:
         """Mark generation as complete and compute final metrics."""
         self.generation_end = time.time()
         logger.info(
-            "Streaming complete tokens=%d prompt_tokens=%d prompt_time=%s generation_time=%s tokens_per_second=%s",
+            "Streaming complete tokens=%d prompt_tokens=%d prompt_time=%.3f generation_time=%.3f tokens_per_second=%.1f",
             self.token_count,
             self.prompt_tokens,
-            f"{self.prompt_time:.3f}",
-            f"{self.generation_time:.3f}",
-            f"{self.tokens_per_second:.1f}",
+            self.prompt_time,
+            self.generation_time,
+            self.tokens_per_second,
         )
         return self
 
@@ -111,66 +108,55 @@ def stream_display(
     show_metrics: bool = True,
     callback: Optional[Callable[[dict], None]] = None,
 ) -> StreamingResult:
-    """Display streaming tokens in a rich terminal panel.
+    """Display streaming tokens in the terminal (plain text, no Rich).
 
-    Iterates over streaming chunks, accumulates text, and renders
-    it in a ``rich.Live`` panel with optional metrics overlay.
+    Iterates over streaming chunks, accumulates text, and prints
+    it to stdout with optional metrics overlay.
 
     Args:
         chunks: Generator yielding chunk dicts from the LLM backend.
-        title: Panel title shown in the rich display.
-        refresh_per_second: Refresh rate for the live display.
+        title: Panel title shown in the output.
+        refresh_per_second: Refresh rate for the live display (unused in plain mode).
         show_metrics: Whether to show token count and speed metrics.
         callback: Optional callback invoked for each chunk.
 
     Returns:
         A ``StreamingResult`` with accumulated text and metrics.
     """
-    console = Console()
     result = StreamingResult()
-    display_text = Text()
-    metrics_lines: list[str] = []
+    accumulated = []
 
-    def _build_panel() -> Panel:
-        """Build the current panel content."""
-        content = display_text.copy()
-        if show_metrics and result.token_count > 0:
-            metric_parts = [f"[dim]Tokens:[/dim] {result.token_count}"]
-            if result.prompt_tokens > 0:
-                metric_parts.append(f"[dim]Prompt:[/dim] {result.prompt_tokens}")
-            if result.prompt_time > 0:
-                metric_parts.append(f"[dim]Prompt:[/dim] {result.prompt_time:.3f}s")
-            gt = result.generation_time
-            if gt > 0:
-                metric_parts.append(f"[dim]Gen:[/dim] {gt:.3f}s")
-            tps = result.tokens_per_second
-            if tps > 0:
-                metric_parts.append(f"[dim]Speed:[/dim] {tps:.1f} tok/s")
-            if metric_parts:
-                footer = "  ".join(metric_parts)
-                content.append(f"\n[dim]{footer}[/dim]")
-        return Panel(content, title=title, border_style="green", expand=True)
-
-    with Live(
-        _build_panel(),
-        console=console,
-        refresh_per_second=refresh_per_second,
-        transient=False,
-    ) as live:
-        for chunk in chunks:
-            delta = _extract_chunk_text(chunk)
-            if delta:
-                display_text.append(delta)
-                result.text += delta
-                result.token_count += 1
-            if callback is not None:
-                try:
-                    callback(chunk)
-                except Exception:
-                    logger.exception("Streaming callback failed")
-            live.update(_build_panel())
+    for chunk in chunks:
+        delta = _extract_chunk_text(chunk)
+        if delta:
+            accumulated.append(delta)
+            result.text += delta
+            result.token_count += 1
+        if callback is not None:
+            try:
+                callback(chunk)
+            except Exception:
+                logger.exception("Streaming callback failed")
 
     result.finalize()
+
+    # Print final result
+    print(f"\n=== {title} ===")
+    print(result.text)
+    if show_metrics and result.token_count > 0:
+        metrics = [f"Tokens: {result.token_count}"]
+        if result.prompt_tokens > 0:
+            metrics.append(f"Prompt: {result.prompt_tokens}")
+        if result.prompt_time > 0:
+            metrics.append(f"Prompt: {result.prompt_time:.3f}s")
+        gt = result.generation_time
+        if gt > 0:
+            metrics.append(f"Gen: {gt:.3f}s")
+        tps = result.tokens_per_second
+        if tps > 0:
+            metrics.append(f"Speed: {tps:.1f} tok/s")
+        print(f"\n{'  '.join(metrics)}")
+
     return result
 
 
@@ -187,8 +173,8 @@ def stream_display_with_timing(
 
     Args:
         chunks: Generator yielding chunk dicts from the LLM backend.
-        title: Panel title shown in the rich display.
-        refresh_per_second: Refresh rate for the live display.
+        title: Panel title shown in the output.
+        refresh_per_second: Refresh rate for the live display (unused in plain mode).
         show_metrics: Whether to show token count and speed metrics.
         callback: Optional callback invoked for each chunk.
         prompt_time: Time spent processing the prompt (seconds).

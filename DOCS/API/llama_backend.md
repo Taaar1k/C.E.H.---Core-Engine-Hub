@@ -4,62 +4,130 @@
 
 ## Overview
 
-The [`LlamaBackend`](../../src/c_e_h/llama_backend.py) class wraps `llama-cpp-python` to provide a clean interface for GGUF model loading, text generation, and grammar-constrained sampling.
+The [`LlamaBackend`](../../src/c_e_h/llama_backend.py) class wraps `llama-cpp-python` to provide a clean interface for GGUF model loading, text generation, streaming, and grammar-constrained sampling.
 
-## Class Definition
+## Supporting Classes
+
+### `ModelConfig`
 
 ```python
-class LlamaBackend:
+class ModelConfig:
     def __init__(
         self,
-        model_path: str,
+        path: str,
         n_gpu_layers: int = -1,
         n_ctx: int = 8192,
         temperature: float = 0.7,
-        top_p: float = 0.9,
+        max_tokens: int = 512,
+        n_batch: int = 512,
+        top_p: float = 0.95,
         repeat_penalty: float = 1.1,
-        seed: int = 42,
+        seed: int = -1,
     ) -> None: ...
 ```
 
-### Constructor Parameters
-
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model_path` | `str` | Required | Path to GGUF model file |
+| `path` | `str` | Required | Path to GGUF model file |
 | `n_gpu_layers` | `int` | `-1` | GPU layers (`-1` = all layers) |
 | `n_ctx` | `int` | `8192` | Context window size |
 | `temperature` | `float` | `0.7` | Sampling temperature |
-| `top_p` | `float` | `0.9` | Nucleus sampling threshold |
+| `max_tokens` | `int` | `512` | Maximum tokens to generate |
+| `n_batch` | `int` | `512` | Batch size for processing |
+| `top_p` | `float` | `0.95` | Nucleus sampling threshold |
 | `repeat_penalty` | `float` | `1.1` | Repetition penalty |
-| `seed` | `int` | `42` | Random seed for reproducibility |
+| `seed` | `int` | `-1` | Random seed (`-1` = random) |
+
+### `GenerationResult`
+
+```python
+@dataclass
+class GenerationResult:
+    text: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_time: float
+    tokens_per_second: float
+    has_context_overflow: bool = False
+    grammar_valid: bool = True
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | `str` | Generated text |
+| `prompt_tokens` | `int` | Number of prompt tokens processed |
+| `completion_tokens` | `int` | Number of completion tokens generated |
+| `total_time` | `float` | Total generation time in seconds |
+| `tokens_per_second` | `float` | Generation speed |
+| `has_context_overflow` | `bool` | Whether context window overflowed |
+| `grammar_valid` | `bool` | Whether output passed grammar validation |
+
+### `TokenTracker`
+
+```python
+@dataclass
+class TokenTracker:
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    start_time: float = 0.0
+    end_time: float = 0.0
+```
+
+Helper class for tracking generation metrics. Used internally by `LlamaBackend`.
+
+### `ModelRouter`
+
+```python
+class ModelRouter:
+    ROUTES: dict[str, str] = {
+        "low": "./models/llama-3-2b-Q4_K_M.gguf",
+        "medium": "./models/llama-3-8b-Q4_K_M.gguf",
+        "high": "./models/llama-3-70b-Q4_K_M.gguf",
+    }
+
+    @classmethod
+    def select_model(cls, complexity: str) -> ModelConfig: ...
+
+    @classmethod
+    def select_model_from_task(cls, task_text: str) -> ModelConfig: ...
+```
+
+Adaptive model routing based on task complexity. `select_model_from_task()` uses heuristics (length, keywords) to select appropriate model.
+
+## Class Definition
+
+### `LlamaBackend`
+
+```python
+class LlamaBackend:
+    def __init__(self, config: ModelConfig) -> None: ...
+```
+
+The backend takes a `ModelConfig` instance (not individual parameters).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `config` | `ModelConfig` | Required | Model configuration |
 
 ## Properties
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `model_path` | `str` | Path to loaded model |
-| `n_gpu_layers` | `int` | GPU layer count |
-| `n_ctx` | `int` | Context window size |
-| `model_info` | `dict` | Model metadata (vocab size, dimensions, etc.) |
-| `is_loaded` | `bool` | Whether model is successfully loaded |
-| `backend_type` | `str` | Backend used (`metal`, `cuda`, `vulkan`, `cpu`) |
+| `config` | `ModelConfig` | Model configuration |
 
 ## Methods
 
 ### Model Loading
 
 ```python
-def load_model(self) -> bool: ...
-def unload_model(self) -> None: ...
-def reload_model(self, model_path: str | None = None) -> bool: ...
+def load(self) -> None: ...
 ```
 
-| Method | Description |
-|--------|-------------|
-| `load_model()` | Load GGUF model into memory |
-| `unload_model()` | Free model from memory |
-| `reload_model(path)` | Reload model (optionally new path) |
+Load the GGUF model into memory. Raises [`BackendError`](#backenderror) on failure.
+
+| Exception | Condition |
+|-----------|-----------|
+| `BackendError` | If `llama-cpp-python` not installed or model file not found |
 
 ### Inference
 
@@ -67,67 +135,71 @@ def reload_model(self, model_path: str | None = None) -> bool: ...
 def generate(
     self,
     prompt: str,
-    max_tokens: int = 4096,
-    temperature: float | None = None,
-    stop: list[str] | None = None,
-) -> str: ...
+    max_tokens: Optional[int] = None,
+    temperature: Optional[float] = None,
+    grammar: Optional[str] = None,
+) -> GenerationResult: ...
 
 def chat(
     self,
-    messages: list[dict],
-    max_tokens: int = 4096,
-    temperature: float | None = None,
-    stop: list[str] | None = None,
-) -> str: ...
+    messages: List[Dict[str, str]],
+    max_tokens: Optional[int] = None,
+) -> GenerationResult: ...
 ```
 
-| Method | Description |
-|--------|-------------|
-| `generate(prompt, max_tokens, temperature, stop)` | Text generation from prompt |
-| `chat(messages, max_tokens, temperature, stop)` | Chat completion with message history |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `generate(prompt, max_tokens, temperature, grammar)` | `GenerationResult` | Text generation from prompt |
+| `chat(messages, max_tokens)` | `GenerationResult` | Chat completion with message history |
 
 **Parameters:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `prompt` | `str` | Required | Input prompt (generate mode) |
-| `messages` | `list[dict]` | Required | Chat messages (chat mode) |
-| `max_tokens` | `int` | `4096` | Maximum tokens to generate |
-| `temperature` | `float \| None` | `None` | Override instance temperature |
-| `stop` | `list[str] \| None` | `None` | Stop sequences |
+| `messages` | `List[Dict[str, str]]` | Required | Chat messages (chat mode) |
+| `max_tokens` | `Optional[int]` | `None` | Override config max_tokens |
+| `temperature` | `Optional[float]` | `None` | Override config temperature |
+| `grammar` | `Optional[str]` | `None` | GBNF grammar for structured output |
 
-**Returns:** Generated text string.
+**Returns:** [`GenerationResult`](#generationresult) with text and metrics.
 
-### Grammar-Constrained Sampling
+### Streaming
 
 ```python
-def generate_with_grammar(
+def complete(
     self,
     prompt: str,
-    grammar: str,
-    max_tokens: int = 4096,
-) -> str: ...
+    max_tokens: Optional[int] = None,
+    temperature: Optional[float] = None,
+    grammar: Optional[str] = None,
+    stream: bool = False,
+    callback: Optional[Callable[[dict], None]] = None,
+) -> "GenerationResult | Generator[dict, None, None]": ...
+
+def chat_stream(
+    self,
+    messages: List[Dict[str, str]],
+    max_tokens: Optional[int] = None,
+    callback: Optional[Callable[[dict], None]] = None,
+) -> Generator[dict, None, None]: ...
 ```
 
-Generate text constrained by a GBNF grammar. Useful for structured output (JSON, tool calls).
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `complete(..., stream=True)` | `Generator[dict]` | Streaming text generation |
+| `chat_stream(messages, ..., callback)` | `Generator[dict]` | Streaming chat completion |
 
 **Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `prompt` | `str` | Input prompt |
-| `grammar` | `str` | GBNF grammar string |
-| `max_tokens` | `int` | Maximum tokens |
+| `stream` | `bool` | If True, return generator instead of result |
+| `callback` | `Callable[[dict], None] \| None` | Optional callback for each chunk |
 
-**Returns:** Grammar-constrained text.
+### OOM Fallback
 
-### Token Management
-
-```python
-def count_tokens(self, text: str) -> int: ...
-def tokenize(self, text: str) -> list[int]: ...
-def detokenize(self, tokens: list[int]) -> str: ...
-```
+Both `generate()` and `chat()` automatically retry on CPU if GPU OOM is detected.
 
 | Method | Description |
 |--------|-------------|

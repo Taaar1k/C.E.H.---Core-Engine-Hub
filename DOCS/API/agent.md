@@ -10,91 +10,58 @@ The [`Agent`](../../src/c_e_h/agent.py) class is the central orchestrator of C.E
 
 ```python
 class Agent:
+    MAX_RETRIES: int = 3
+    BASE_RETRY_DELAY: float = 1.0
+
     def __init__(
         self,
-        model_path: str,
-        config: dict | None = None,
-        memory: MemorySystem | None = None,
-        tools: ToolRegistry | None = None,
-        llama_backend: LlamaBackend | None = None,
+        config: Optional[AgentConfig] = None,
+        display_mode: Literal["clean", "streaming"] = "clean",
     ) -> None: ...
+
+    @classmethod
+    def from_agent_md(cls, path: str = "agent.md") -> "Agent": ...
 ```
+
+The [`Agent`](../../src/c_e_h/agent.py) class is the central orchestrator of C.E.H. It manages the task loop, context window, decision-making, and error handling. The LLM backend is lazy-loaded on first use via [`_ensure_backend()`](src/c_e_h/agent.py:340).
 
 ### Constructor Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model_path` | `str` | Required | Path to GGUF model file |
-| `config` | `dict \| None` | `None` | Agent configuration dictionary |
-| `memory` | `MemorySystem \| None` | `None` | Memory system instance (auto-created if `None`) |
-| `tools` | `ToolRegistry \| None` | `None` | Tool registry instance (auto-created if `None`) |
-| `llama_backend` | `LlamaBackend \| None` | `None` | LLM backend instance (auto-created if `None`) |
+| `config` | [`AgentConfig`] | `None` | Agent configuration (auto-created if `None`) |
+| `display_mode` | `Literal["clean", "streaming"]` | `"clean"` | Output display mode |
+
+### Class Attributes
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `MAX_RETRIES` | `int` | `3` | Maximum retry attempts for failed generations |
+| `BASE_RETRY_DELAY` | `float` | `1.0` | Base delay in seconds between retries |
+
+### Static Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| [`from_agent_md(path)`](src/c_e_h/agent.py:142) | `Agent` | Load configuration from `agent.md` YAML file |
+| [`_parse_config(data)`](src/c_e_h/agent.py:165) | `AgentConfig` | Parse raw config dictionary into `AgentConfig` |
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| [`agent_id`](#agent_id) | `str` | Unique identifier for this agent instance |
-| [`permissions`](#permissions) | `PermissionManager` | Permission management object |
-| [`memory`](#memory) | `MemorySystem` | Memory system reference |
-| [`tools`](#tools) | `ToolRegistry` | Tool registry reference |
-| [`llama_backend`](#llama_backend) | `LlamaBackend` | LLM backend reference |
-| [`context_window`](#context_window) | `ContextWindow` | Active context window manager |
-| [`state`](#state) | `AgentState` | Current agent state enum |
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| [`config`](#config) | [`AgentConfig`] | Agent configuration |
+| [`state`](#state) | [`AgentState`] | Current agent state dataclass |
+| [`display_mode`](#display_mode) | `Literal["clean", "streaming"]` | Output display mode |
 
-### `agent_id`
+### `config`
 
 ```python
 @property
-def agent_id(self) -> str: ...
+def config(self) -> AgentConfig: ...
 ```
 
-Returns a UUID v4 string identifying this agent instance. Persisted across restarts if the same config is used.
-
-### `permissions`
-
-```python
-@property
-def permissions(self) -> PermissionManager: ...
-```
-
-Returns the [`PermissionManager`](#permissionmanager) instance controlling tool execution permissions.
-
-### `memory`
-
-```python
-@property
-def memory(self) -> MemorySystem: ...
-```
-
-Returns the [`MemorySystem`](memory.md) instance for context and session management.
-
-### `tools`
-
-```python
-@property
-def tools(self) -> ToolRegistry: ...
-```
-
-Returns the [`ToolRegistry`](tools.md) instance for tool management.
-
-### `llama_backend`
-
-```python
-@property
-def llama_backend(self) -> LlamaBackend: ...
-```
-
-Returns the [`LlamaBackend`](llama_backend.md) instance for LLM inference.
-
-### `context_window`
-
-```python
-@property
-def context_window(self) -> ContextWindow: ...
-```
-
-Returns the active [`ContextWindow`](#contextwindow) managing conversation history and compaction.
+Returns the [`AgentConfig`](#agentconfig) instance containing model path, GPU layers, context size, and other settings.
 
 ### `state`
 
@@ -103,17 +70,28 @@ Returns the active [`ContextWindow`](#contextwindow) managing conversation histo
 def state(self) -> AgentState: ...
 ```
 
-Returns the current [`AgentState`](#agentstate) enum value.
+Returns the current [`AgentState`](#agentstate) dataclass with session metadata.
+
+### `display_mode`
+
+```python
+@property
+def display_mode(self) -> Literal["clean", "streaming"]: ...
+```
+
+Returns the output display mode. `"clean"` shows only the final response with a spinner; `"streaming"` shows tokens as they arrive.
+
+## Methods
 
 ## Methods
 
 ### `run()`
 
 ```python
-def run(self, prompt: str) -> AgentResponse: ...
+def run(self, prompt: str) -> str: ...
 ```
 
-Execute a single-shot agent run with the given prompt.
+Execute one step of the agent loop with retry logic. This is the primary entry point for agent interaction.
 
 **Parameters:**
 
@@ -121,209 +99,145 @@ Execute a single-shot agent run with the given prompt.
 |-----------|------|-------------|
 | `prompt` | `str` | User prompt to process |
 
-**Returns:** [`AgentResponse`](#agentresponse) with the agent's output.
+**Returns:** `str` — The agent's generated response text.
 
-**Raises:**
-
-| Exception | Condition |
-|-----------|-----------|
-| `RuntimeError` | If agent is not initialized |
-| `ContextFullError` | If context window is full and compaction fails |
+**Implementation:** Calls [`_generate_response_with_retry_clean()`](src/c_e_h/agent.py:255) with up to `MAX_RETRIES` (3) attempts, using `BASE_RETRY_DELAY` (1.0s) between retries.
 
 ---
 
-### `run_loop()`
+### `_ensure_backend()`
 
 ```python
-def run_loop(self, prompt: str) -> list[AgentResponse]: ...
+def _ensure_backend(self) -> None: ...
 ```
 
-Execute the full agent task loop (multi-step reasoning with tool use).
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `prompt` | `str` | Initial user prompt |
-
-**Returns:** List of [`AgentResponse`](#agentresponse) objects, one per loop iteration.
-
-**Loop Behavior:**
-
-1. Send prompt to LLM
-2. Parse LLM output for tool calls or final response
-3. If tool call: execute tool, add result to context, repeat
-4. If final response: return result
-5. Stop if max iterations reached or context full
+Lazy-load and initialize [`LlamaBackend`](llama_backend.md) if not already loaded. Called automatically before first inference.
 
 ---
 
-### `record_error()`
+### `_generate_response_with_retry_clean(prompt: str) -> str`
 
-```python
-def record_error(self) -> None: ...
-```
-
-Record a tool execution error. Increments error counter and may trigger permission degradation.
+Generate response with clean retry logic. Called by `run()`.
 
 ---
 
-### `record_success()`
+### `_generate_response(prompt: str) -> str`
 
-```python
-def record_success(self) -> None: ...
-```
-
-Record a successful tool execution. May reset permission mode if success threshold reached.
+Generate response by calling LLM backend. Handles context overflow detection.
 
 ---
 
-### `reset_context()`
+### `_estimate_tokens(text: str) -> int`
 
-```python
-def reset_context(self) -> None: ...
-```
-
-Reset the context window to empty, clearing conversation history.
+Estimate token count from text (rough approximation: ~4 chars per token).
 
 ---
 
-### `save_state()`
+### `save_state() -> Dict[str, Any]`
 
-```python
-def save_state(self) -> None: ...
-```
-
-Persist agent state (permissions, error count, session ID) to SQLite database.
+Save current agent state (timestamps, metadata) to dictionary.
 
 ---
 
-### `load_state()`
+### `load_state(data: Dict[str, Any]) -> None`
+
+Restore agent state from a previously saved dictionary.
+
+---
+
+### `get_state_json() -> str`
+
+Get agent state as a JSON string for serialization.
+
+---
+
+### `load_state_json(json_str: str) -> "Agent"`
+
+Class method to create an `Agent` instance from a JSON string.
+
+---
+
+### `from_agent_md(path: str = "agent.md") -> "Agent"`
+
+Class method to load configuration from `agent.md` YAML file and create an `Agent` instance.
+
+## Data Classes
+
+### `AgentConfig`
 
 ```python
-def load_state(self) -> None: ...
+class AgentConfig(BaseModel):
+    """Agent configuration loaded from agent.md."""
 ```
 
-Restore agent state from SQLite database.
-
-## Enums
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `str` | `"CEH-Agent"` | Agent display name |
+| `version` | `str` | `"0.1.0"` | Agent version |
+| `description` | `str` | `"Your local AI assistant"` | Agent description |
+| `model_path` | `str` | `"./models/llama-3-8b.Q4_K_M.gguf"` | Default GGUF model path |
+| `n_gpu_layers` | `int` | `-1` | GPU offload layers (`-1` = all) |
+| `n_ctx` | `int` | `8192` | Context window size |
+| `temperature` | `float` | `0.7` | Sampling temperature |
+| `max_context_tokens` | `int` | `8192` | Maximum context tokens |
+| `compaction_strategy` | `str` | `"microcompact"` | Context compaction strategy |
+| `permission_mode` | `str` | `"autonomous"` | Default permission mode |
+| `max_auto_errors` | `int` | `3` | Errors before permission degradation |
+| `success_reset` | `int` | `5` | Successes before permission reset |
+| `tools` | `Dict[str, bool]` | `{file_read: True, file_write: True, execute_command: True, web_search: False}` | Tool enablement flags |
+| `log_level` | `str` | `"INFO"` | Logging verbosity |
+| `log_format` | `str` | `"json"` | Log format |
+| `models_directory` | `Optional[str]` | `None` | Default model scan directory |
+| `default_profile` | `Optional[str]` | `None` | Default profile name from `profiles.yaml` |
 
 ### `AgentState`
 
 ```python
-class AgentState(Enum):
-    IDLE = "idle"
-    RUNNING = "running"
-    WAITING_FOR_INPUT = "waiting_for_input"
-    ERROR = "error"
-    SHUTDOWN = "shutdown"
-```
-
-## Data Classes
-
-### `AgentResponse`
-
-```python
 @dataclass
-class AgentResponse:
-    text: str
-    tool_calls: list[ToolCall] | None = None
-    is_final: bool = False
-    iteration: int = 0
-    error: str | None = None
+class AgentState:
+    """Represents the current state of the agent."""
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `text` | `str` | Response text |
-| `tool_calls` | `list[ToolCall] \| None` | Tool calls made in this iteration |
-| `is_final` | `bool` | Whether this is the final response |
-| `iteration` | `int` | Loop iteration number |
-| `error` | `str \| None` | Error message if failed |
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `step_count` | `int` | `0` | Current step count in agent loop |
+| `mode` | `str` | `"autonomous"` | Current permission mode |
+| `auto_errors` | `int` | `0` | Consecutive error count |
+| `context` | `List[Dict[str, Any]]` | `[]` | Conversation context |
+| `last_response` | `Optional[str]` | `None` | Last generated response |
+| `started_at` | `Optional[str]` | `None` | ISO-8601 start timestamp |
 
-### `ToolCall`
-
-```python
-@dataclass
-class ToolCall:
-    name: str
-    arguments: dict[str, Any]
-    call_id: str
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `str` | Tool name |
-| `arguments` | `dict[str, Any]` | Tool arguments |
-| `call_id` | `str` | Unique call identifier |
-
-## PermissionManager
-
-```python
-class PermissionManager:
-    def __init__(self, config: dict) -> None: ...
-
-    @property
-    def mode(self) -> PermissionMode: ...
-
-    def request_permission(self, tool_name: str, args: dict) -> bool: ...
-    def grant_permission(self, tool_name: str) -> None: ...
-    def revoke_permission(self, tool_name: str) -> None: ...
-    def degrade_to_approval(self) -> None: ...
-    def reset_to_autonomous(self) -> None: ...
-```
-
-### `PermissionMode` Enum
-
-```python
-class PermissionMode(Enum):
-    AUTONOMOUS = "autonomous"
-    APPROVAL = "approval"
-```
-
-## ContextWindow
-
-```python
-class ContextWindow:
-    def __init__(self, max_tokens: int, strategy: str) -> None: ...
-
-    @property
-    def current_tokens(self) -> int: ...
-    @property
-    def is_full(self) -> bool: ...
-
-    def add_message(self, role: str, content: str) -> None: ...
-    def compact(self) -> str | None: ...
-    def clear(self) -> None: ...
-    def get_messages(self) -> list[dict]: ...
-```
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `max_tokens` | `int` | Required | Maximum token capacity |
-| `strategy` | `str` | Required | Compaction strategy (`snip` or `microcompact`) |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| [`to_dict()`](src/c_e_h/agent.py:85) | `Dict[str, Any]` | Serialize state to dictionary |
+| [`from_dict(data)`](src/c_e_h/agent.py:90) | `AgentState` | Restore state from dictionary |
 
 ## Usage Example
 
 ```python
-from c_e_h.agent import Agent
-from c_e_h.memory import MemorySystem
-from c_e_h.tools import ToolRegistry
+from c_e_h.agent import Agent, AgentConfig
 
-# Create agent with defaults
-agent = Agent(model_path="./models/llama-3-8b.Q4_K_M.gguf")
+# Create agent with default config
+agent = Agent()
+
+# Create agent with custom config
+config = AgentConfig(
+    name="MyAgent",
+    model_path="./models/my-model.gguf",
+    n_gpu_layers=32,
+    temperature=0.5,
+)
+agent = Agent(config=config)
+
+# Load from agent.md
+agent = Agent.from_agent_md("agent.md")
 
 # Single-shot run
 response = agent.run("Write a Python function to calculate Fibonacci numbers")
-print(response.text)
-
-# Multi-step run
-responses = agent.run_loop("Refactor this code to use async/await")
-for i, resp in enumerate(responses):
-    print(f"Iteration {i}: {resp.text[:100]}...")
+print(response)
 
 # Check state
 print(f"Agent state: {agent.state}")
-print(f"Permission mode: {agent.permissions.mode}")
-print(f"Context usage: {agent.context_window.current_tokens}/{8192}")
+print(f"Step count: {agent.state.step_count}")
+print(f"Permission mode: {agent.state.mode}")
 ```

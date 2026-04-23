@@ -326,13 +326,13 @@ class TestLlamaBackendStreaming:
 
     @patch("llama_cpp.Llama")
     @patch("c_e_h.llama_backend.Path.exists")
-    def test_complete_stream_yields_chunks(self, MockExists, MockLlama):
+    def test_complete_stream_yields_chunks(self, mock_exists, mock_llama):
         """complete(stream=True) should yield chunks from the model."""
         from c_e_h.llama_backend import LlamaBackend, ModelConfig
 
-        MockExists.return_value = True
+        mock_exists.return_value = True
         mock_model = MagicMock()
-        MockLlama.return_value = mock_model
+        mock_llama.return_value = mock_model
         mock_model.create_completion.return_value = iter([
             {"choices": [{"text": "A"}]},
             {"choices": [{"text": "B"}], "usage": {"completion_tokens": 2, "prompt_tokens": 1}},
@@ -350,13 +350,13 @@ class TestLlamaBackendStreaming:
 
     @patch("llama_cpp.Llama")
     @patch("c_e_h.llama_backend.Path.exists")
-    def test_complete_stream_with_callback(self, MockExists, MockLlama):
+    def test_complete_stream_with_callback(self, mock_exists, mock_llama):
         """complete(stream=True) should invoke callback for each chunk."""
         from c_e_h.llama_backend import LlamaBackend, ModelConfig
 
-        MockExists.return_value = True
+        mock_exists.return_value = True
         mock_model = MagicMock()
-        MockLlama.return_value = mock_model
+        mock_llama.return_value = mock_model
         mock_model.create_completion.return_value = iter([
             {"choices": [{"text": "X"}]},
             {"choices": [{"text": "Y"}], "usage": {"completion_tokens": 2, "prompt_tokens": 1}},
@@ -376,13 +376,13 @@ class TestLlamaBackendStreaming:
 
     @patch("llama_cpp.Llama")
     @patch("c_e_h.llama_backend.Path.exists")
-    def test_complete_non_stream_returns_generation_result(self, MockExists, MockLlama):
+    def test_complete_non_stream_returns_generation_result(self, mock_exists, mock_llama):
         """complete(stream=False) should return GenerationResult."""
         from c_e_h.llama_backend import LlamaBackend, ModelConfig
 
-        MockExists.return_value = True
+        mock_exists.return_value = True
         mock_model = MagicMock()
-        MockLlama.return_value = mock_model
+        mock_llama.return_value = mock_model
         mock_model.create_completion.return_value = {
             "choices": [{"text": "Hello"}],
             "usage": {"prompt_tokens": 5, "completion_tokens": 3},
@@ -400,13 +400,13 @@ class TestLlamaBackendStreaming:
 
     @patch("llama_cpp.Llama")
     @patch("c_e_h.llama_backend.Path.exists")
-    def test_chat_stream_yields_chunks(self, MockExists, MockLlama):
+    def test_chat_stream_yields_chunks(self, mock_exists, mock_llama):
         """chat_stream() should yield chunks from the model."""
         from c_e_h.llama_backend import LlamaBackend, ModelConfig
 
-        MockExists.return_value = True
+        mock_exists.return_value = True
         mock_model = MagicMock()
-        MockLlama.return_value = mock_model
+        mock_llama.return_value = mock_model
         mock_model.create_chat_completion.return_value = iter([
             {"choices": [{"delta": {"content": "Hi"}}]},
             {"choices": [{"delta": {"content": " there"}}], "usage": {"completion_tokens": 2, "prompt_tokens": 3}},

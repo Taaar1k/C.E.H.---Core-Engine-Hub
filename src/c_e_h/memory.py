@@ -593,11 +593,11 @@ class FAISSAdapter(VectorDBInterface):
             return
         try:
             import faiss  # type: ignore
-        except ImportError:  # pragma: no cover
+        except ImportError as exc:  # pragma: no cover
             raise ImportError(
                 "faiss is required for FAISSAdapter. "
                 "Install with: pip install faiss-cpu"
-            )
+            ) from exc
         if self.index_type == "Flat":
             self._index = faiss.IndexFlatL2(self.dim)
         else:
@@ -688,11 +688,11 @@ class ChromaDBAdapter(VectorDBInterface):
             return
         try:
             import chromadb  # type: ignore
-        except ImportError:  # pragma: no cover
+        except ImportError as exc:  # pragma: no cover
             raise ImportError(
                 "chromadb is required for ChromaDBAdapter. "
                 "Install with: pip install chromadb"
-            )
+            ) from exc
         if self.persist_path:
             self._client = chromadb.PersistentClient(path=self.persist_path)
         else:
@@ -833,7 +833,7 @@ class PersistentMemory:
         """Parse agent.md YAML-like content into AgentConfig."""
         data: Dict[str, Any] = {}
         current_section = None
-        current_subsection = None
+        _current_subsection = None
 
         for line in content.splitlines():
             stripped = line.strip()
@@ -843,11 +843,10 @@ class PersistentMemory:
             # Detect sections (MUST come before generic # check)
             if stripped.startswith("## "):
                 current_section = stripped[3:].strip().lower()
-                current_subsection = None
                 continue
 
             if stripped.startswith("### "):
-                current_subsection = stripped[4:].strip().lower()
+                _ = stripped[4:].strip().lower()
                 continue
 
             # Skip other comments

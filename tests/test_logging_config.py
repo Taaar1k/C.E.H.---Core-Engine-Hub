@@ -266,7 +266,7 @@ class TestStructlogIntegration:
             setup_logging(log_file=log_file, log_level="DEBUG", environment="production")
 
             # structlog stores processors on the factory
-            factory = structlog.get_config().get("logger_factory")
+            _factory = structlog.get_config().get("logger_factory")
             # The processors are set via configure; verify by checking config
             config = structlog.get_config()
             # After configure, the processors should be set

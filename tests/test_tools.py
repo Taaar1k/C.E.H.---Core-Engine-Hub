@@ -630,7 +630,7 @@ class TestToolExecutor:
 
     def test_execute_success(self, fresh_registry, fresh_permission_manager):
         """Test successful tool execution."""
-        executor = ToolExecutor(
+        _executor = ToolExecutor(
             tool_registry=fresh_registry,
             permission_manager=fresh_permission_manager,
         )

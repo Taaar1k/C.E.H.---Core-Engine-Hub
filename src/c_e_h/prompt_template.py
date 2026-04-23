@@ -262,7 +262,7 @@ class PromptTemplate:
         )
         return result
 
-    def set_model(self, model: Llama) -> None:  # type: ignore[name-defined]
+    def set_model(self, model: Any) -> None:
         """Attach a ``llama_cpp.Llama`` instance for inference support.
 
         Parameters

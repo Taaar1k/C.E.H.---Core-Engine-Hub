@@ -1,0 +1,9 @@
+name: default
+model: ''
+n_gpu_layers: -1
+threads: null
+ctx_size: 8192
+flash_attn: auto
+cache_type_k: q8_0
+cache_type_v: q8_0
+n_cpu_moe_draft: 0

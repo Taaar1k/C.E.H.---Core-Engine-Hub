@@ -281,9 +281,9 @@ class TestSecurityPolicy:
 
     def test_policy_custom_allowed_commands(self):
         """Test that SecurityPolicy accepts custom allowed_commands."""
-        custom = {"ls", "cat"}
-        policy = SecurityPolicy(allowed_commands=custom)
-        assert policy.allowed_commands == frozenset(custom)
+        custom_frozenset = {"ls", "cat"}
+        policy = SecurityPolicy(allowed_commands=custom_frozenset)
+        assert policy.allowed_commands == frozenset(custom_frozenset)
         assert "git" not in policy.allowed_commands
 
     def test_policy_default_max_length(self):

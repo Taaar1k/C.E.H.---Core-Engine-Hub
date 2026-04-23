@@ -73,16 +73,16 @@ class TestModelConfig:
 class TestBackendLoad:
     @patch("llama_cpp.Llama")
     @patch("c_e_h.llama_backend.Path.exists")
-    def test_backend_load_success(self, MockExists, MockLlama):
+    def test_backend_load_success(self, mock_exists, mock_llama):
         """Mock llama_cpp.Llama init, verify config passed correctly."""
         from c_e_h.llama_backend import LlamaBackend, ModelConfig
 
-        MockExists.return_value = True
+        mock_exists.return_value = True
         config = ModelConfig(path="./models/test.gguf")
         backend = LlamaBackend(config)
         backend.load()
 
-        MockLlama.assert_called_once_with(
+        mock_llama.assert_called_once_with(
             model_path="models/test.gguf",
             n_gpu_layers=-1,
             n_ctx=8192,
@@ -130,14 +130,14 @@ class TestBackendLoad:
 class TestBackendGenerate:
     @patch("llama_cpp.Llama")
     @patch("c_e_h.llama_backend.Path.exists")
-    def test_backend_generate(self, MockExists, MockLlama):
+    def test_backend_generate(self, mock_exists, mock_llama):
         """Mock completion result, verify GenerationResult returned with correct metrics."""
         from c_e_h.llama_backend import LlamaBackend, ModelConfig
 
-        MockExists.return_value = True
+        mock_exists.return_value = True
         mock_model = MagicMock()
         mock_model.create_completion.return_value = MOCK_COMPLETION_RESULT
-        MockLlama.return_value = mock_model
+        mock_llama.return_value = mock_model
 
         config = ModelConfig(path="./models/test.gguf")
         backend = LlamaBackend(config)
@@ -155,18 +155,18 @@ class TestBackendGenerate:
 
     @patch("llama_cpp.Llama")
     @patch("c_e_h.llama_backend.Path.exists")
-    def test_backend_generate_oom_fallback(self, MockExists, MockLlama):
+    def test_backend_generate_oom_fallback(self, mock_exists, mock_llama):
         """Mock first call raises OOM-like error, verify retry with n_gpu_layers=0."""
         from c_e_h.llama_backend import LlamaBackend, ModelConfig
 
-        MockExists.return_value = True
+        mock_exists.return_value = True
         mock_model = MagicMock()
         # First call raises OOM, second call (CPU retry) succeeds
         mock_model.create_completion.side_effect = [
             Exception("OutOfMemory: CUDA error"),
             MOCK_COMPLETION_RESULT,
         ]
-        MockLlama.return_value = mock_model
+        mock_llama.return_value = mock_model
 
         config = ModelConfig(path="./models/test.gguf")
         backend = LlamaBackend(config)
@@ -193,14 +193,14 @@ class TestBackendGenerate:
 class TestBackendChat:
     @patch("llama_cpp.Llama")
     @patch("c_e_h.llama_backend.Path.exists")
-    def test_backend_chat(self, MockExists, MockLlama):
+    def test_backend_chat(self, mock_exists, mock_llama):
         """Mock chat completion result, verify response."""
         from c_e_h.llama_backend import LlamaBackend, ModelConfig
 
-        MockExists.return_value = True
+        mock_exists.return_value = True
         mock_model = MagicMock()
         mock_model.create_chat_completion.return_value = MOCK_CHAT_RESULT
-        MockLlama.return_value = mock_model
+        mock_llama.return_value = mock_model
 
         config = ModelConfig(path="./models/test.gguf")
         backend = LlamaBackend(config)

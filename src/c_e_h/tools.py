@@ -404,11 +404,11 @@ class PermissionManager:
             True if approved, False if denied.
         """
         # Sanitize args before logging to avoid exposing sensitive data
-        _SENSITIVE_KEYS = {"password", "secret", "token", "api_key", "apikey", "credential"}
+        sensitive_keys = {"password", "secret", "token", "api_key", "apikey", "credential"}
         safe_args = {
             k: str(v)[:50] if not isinstance(v, (str, int, float, bool, type(None))) else v
             for k, v in args.items()
-            if k.lower() not in _SENSITIVE_KEYS
+            if k.lower() not in sensitive_keys
         }
         _log_info(
             "Approval requested",
@@ -643,12 +643,12 @@ def read_file(path: str, max_lines: int = 100) -> str:
     # Security: path traversal prevention using safe_path_any with ALLOWED_PATHS
     try:
         resolved = Path(safe_path_any([str(p) for p in ALLOWED_PATHS], sanitized_path))
-    except PathTraversalError:
+    except PathTraversalError as err:
         log_security_event(
             "read_file_path_traversal",
             {"path": sanitized_path, "allowed_paths": [str(p) for p in ALLOWED_PATHS]},
         )
-        raise PathTraversalError(f"Path traversal detected: {sanitized_path}")
+        raise PathTraversalError(f"Path traversal detected: {sanitized_path}") from err
 
     # Check if file exists
     if not resolved.exists():
@@ -661,10 +661,10 @@ def read_file(path: str, max_lines: int = 100) -> str:
     try:
         with open(resolved, "r", encoding="utf-8") as f:
             lines = f.readlines()
-    except PermissionError:
-        raise PermissionError(f"Permission denied: {sanitized_path}")
-    except UnicodeDecodeError:
-        raise ValueError(f"Cannot read non-text file: {sanitized_path}")
+    except PermissionError as err:
+        raise PermissionError(f"Permission denied: {sanitized_path}") from err
+    except UnicodeDecodeError as err:
+        raise ValueError(f"Cannot read non-text file: {sanitized_path}") from err
 
     # Apply line limit
     if len(lines) > max_lines:
@@ -703,12 +703,12 @@ def write_file(path: str, content: str, append: bool = False) -> str:
     # Security: path traversal prevention using safe_path_any with ALLOWED_PATHS
     try:
         resolved = Path(safe_path_any([str(p) for p in ALLOWED_PATHS], sanitized_path))
-    except PathTraversalError:
+    except PathTraversalError as err:
         log_security_event(
             "write_file_path_traversal",
             {"path": sanitized_path, "allowed_paths": [str(p) for p in ALLOWED_PATHS]},
         )
-        raise PathTraversalError(f"Path traversal detected: {sanitized_path}")
+        raise PathTraversalError(f"Path traversal detected: {sanitized_path}") from err
 
     # Ensure parent directory exists
     resolved.parent.mkdir(parents=True, exist_ok=True)
@@ -717,8 +717,8 @@ def write_file(path: str, content: str, append: bool = False) -> str:
     try:
         with open(resolved, mode, encoding="utf-8") as f:
             f.write(sanitized_content)
-    except PermissionError:
-        raise PermissionError(f"Permission denied: {sanitized_path}")
+    except PermissionError as err:
+        raise PermissionError(f"Permission denied: {sanitized_path}") from err
 
     bytes_written = len(sanitized_content.encode("utf-8"))
     return f"Successfully wrote {bytes_written} bytes to {sanitized_path}"
@@ -857,8 +857,8 @@ def list_directory(path: str, recursive: bool = False) -> str:
 
     try:
         resolved = Path(safe_path_any([str(p) for p in ALLOWED_PATHS], sanitized_path))
-    except PathTraversalError:
-        raise PathTraversalError(f"Path traversal detected: {sanitized_path}")
+    except PathTraversalError as err:
+        raise PathTraversalError(f"Path traversal detected: {sanitized_path}") from err
 
     if not resolved.exists():
         raise FileNotFoundError(f"Path not found: {sanitized_path}")
@@ -868,7 +868,7 @@ def list_directory(path: str, recursive: bool = False) -> str:
 
     if recursive:
         output_parts = [f"Directory listing (recursive): {sanitized_path}\n"]
-        for root, dirs, files in os.walk(resolved):
+        for root, _dirs, files in os.walk(resolved):
             level = root.replace(str(resolved), "").count(os.sep)
             indent = "  " * level
             output_parts.append(f"{indent}[DIR] {root.name}/")
@@ -908,8 +908,8 @@ def create_directory(path: str, parents: bool = False) -> str:
 
     try:
         resolved = Path(safe_path_any([str(p) for p in ALLOWED_PATHS], sanitized_path))
-    except PathTraversalError:
-        raise PathTraversalError(f"Path traversal detected: {sanitized_path}")
+    except PathTraversalError as err:
+        raise PathTraversalError(f"Path traversal detected: {sanitized_path}") from err
 
     mkdir_kwargs = {"exist_ok": True}
     if parents:
@@ -944,8 +944,8 @@ def delete_file(path: str) -> str:
 
     try:
         resolved = Path(safe_path_any([str(p) for p in ALLOWED_PATHS], sanitized_path))
-    except PathTraversalError:
-        raise PathTraversalError(f"Path traversal detected: {sanitized_path}")
+    except PathTraversalError as err:
+        raise PathTraversalError(f"Path traversal detected: {sanitized_path}") from err
 
     if not resolved.exists():
         raise FileNotFoundError(f"File not found: {sanitized_path}")
@@ -1039,8 +1039,8 @@ def search_files(pattern: str, path: str = ".") -> str:
 
     try:
         resolved = Path(safe_path_any([str(p) for p in ALLOWED_PATHS], sanitized_path))
-    except PathTraversalError:
-        raise PathTraversalError(f"Path traversal detected: {sanitized_path}")
+    except PathTraversalError as err:
+        raise PathTraversalError(f"Path traversal detected: {sanitized_path}") from err
 
     if not resolved.is_dir():
         raise ValueError(f"Not a directory: {sanitized_path}")
@@ -1079,6 +1079,7 @@ def github(action: str, repo: str, path: str = "") -> str:
     """
     import json
     import os
+    import urllib
 
     token = os.environ.get("GITHUB_TOKEN")
     headers = {"Accept": "application/vnd.github.v3+json"}

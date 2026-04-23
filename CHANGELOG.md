@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Added (TASK-033: Config Expansion)
+
+- **TASK-034**: `CleanChatDisplay` class for clean chat output with spinner, hideable tool calls and reasoning ([`src/c_e_h/ui/clean_display.py`](src/c_e_h/ui/clean_display.py))
+- **TASK-035**: `scan_for_models()` function to auto-discover `.gguf` files with metadata ([`src/c_e_h/model_scanner.py`](src/c_e_h/model_scanner.py))
+- **TASK-036**: `ProfileManager` class with full CRUD for Easy/Advanced configuration profiles ([`src/c_e_h/profile_manager.py`](src/c_e_h/profile_manager.py))
+- **TASK-037**: `InteractiveLauncher` — 5-step guided flow for model selection, profile management, and agent launch ([`src/c_e_h/ui/launcher.py`](src/c_e_h/ui/launcher.py))
+- `AgentConfig.models_directory` field — default scan directory for `.gguf` files
+- `AgentConfig.default_profile` field — default profile name to load from `profiles.yaml`
+- `DOCS/CONFIG/PROFILES.md` — profile format, Easy/Advanced parameter tables, examples, CLI flags
+- `DOCS/UI/LAUNCHER.md` — interactive flow, keyboard shortcuts, non-TTY fallback behavior
+
+### Changed (TASK-033: Config Expansion)
+
+- `agent.md` parser (`Agent._parse_config`) now handles `models_directory` and `default_profile` fields
+- `profiles.yaml` schema validated against Pydantic `EasyProfile` and `AdvancedProfile` models
+- `profiles.yaml` created with `0600` permissions (owner read/write only)
+
+### Added (Initial)
 
 - Initial project scaffolding with C.E.H. (Core Engine Hub) framework
 - Core agent engine with single-shot and multi-step task loops ([`src/c_e_h/agent.py`](src/c_e_h/agent.py))

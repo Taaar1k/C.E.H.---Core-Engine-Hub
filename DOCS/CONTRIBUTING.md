@@ -203,6 +203,37 @@ class TestExampleFunction:
 | Slow | `@pytest.mark.slow` | Tests >1 second |
 | Model | `@pytest.mark.model` | Tests requiring model file |
 
+### Current Test Suite
+
+The project has **22 test files** covering all major modules:
+
+| Test File | Module Under Test |
+|-----------|-------------------|
+| [`tests/test_agent.py`](../tests/test_agent.py) | Agent engine |
+| [`tests/test_clean_display.py`](../tests/test_clean_display.py) | CleanChatDisplay UI |
+| [`tests/test_cli.py`](../tests/test_cli.py) | CLI commands |
+| [`tests/test_db_migrate.py`](../tests/test_db_migrate.py) | Database migrations |
+| [`tests/test_debug.py`](../tests/test_debug.py) | Debug utilities |
+| [`tests/test_integration_config_expansion.py`](../tests/test_integration_config_expansion.py) | Config expansion integration |
+| [`tests/test_integration.py`](../tests/test_integration.py) | End-to-end integration |
+| [`tests/test_launcher.py`](../tests/test_launcher.py) | InteractiveLauncher |
+| [`tests/test_llama_backend.py`](../tests/test_llama_backend.py) | Llama backend |
+| [`tests/test_logging_config.py`](../tests/test_logging_config.py) | Logging configuration |
+| [`tests/test_memory.py`](../tests/test_memory.py) | Memory system |
+| [`tests/test_model_registry.py`](../tests/test_model_registry.py) | Model registry |
+| [`tests/test_model_scanner.py`](../tests/test_model_scanner.py) | Model scanner |
+| [`tests/test_plugin.py`](../tests/test_plugin.py) | Plugin system |
+| [`tests/test_profile_manager.py`](../tests/test_profile_manager.py) | Profile manager |
+| [`tests/test_security.py`](../tests/test_security.py) | Security policy |
+| [`tests/test_session_manager.py`](../tests/test_session_manager.py) | Session manager |
+| [`tests/test_shutdown.py`](../tests/test_shutdown.py) | Shutdown handler |
+| [`tests/test_streaming.py`](../tests/test_streaming.py) | Streaming utilities |
+| [`tests/test_tools.py`](../tests/test_tools.py) | Tool framework |
+| [`tests/test_ui_dashboard.py`](../tests/test_ui_dashboard.py) | Dashboard UI |
+| [`tests/test_ui_session.py`](../tests/test_ui_session.py) | Session UI |
+| [`tests/test_ui_streaming.py`](../tests/test_ui_streaming.py) | UI streaming |
+| [`tests/test_ui_widgets.py`](../tests/test_ui_widgets.py) | UI widgets |
+
 ### Running Tests
 
 ```bash

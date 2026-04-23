@@ -8,6 +8,7 @@
 
 - [Threat Model](#threat-model)
 - [Security Layers](#security-layers)
+- [SecurityPolicy Class](#securitypolicy-class)
 - [Permission System](#permission-system)
 - [Tool Security](#tool-security)
 - [Sandboxing](#sandboxing)
@@ -103,16 +104,24 @@ permissions:
 All tool arguments are validated using **Pydantic models** before execution:
 
 ```python
-class ExecuteCommandSchema(BaseModel):
-    command: str = Field(..., description="Command to execute")
-    args: list[str] = Field(default=[], description="Command arguments")
+from pydantic import BaseModel
 
-    @validator("command")
-    def validate_command(cls, v: str) -> str:
-        dangerous = ["rm -rf", "mkfs", "dd if=", "> /dev/"]
-        if any(d in v.lower() for d in dangerous):
-            raise ValueError(f"Blocked dangerous command pattern: {v}")
-        return v
+class ReadFileSchema(BaseModel):
+    path: str
+    max_lines: int = 100
+
+class WriteFileSchema(BaseModel):
+    path: str
+    content: str
+    append: bool = False
+
+class ExecuteCommandSchema(BaseModel):
+    command: str
+    timeout: int = 30
+
+class WebSearchSchema(BaseModel):
+    query: str
+    max_results: int = 5
 ```
 
 **Validation Rules**:
@@ -120,10 +129,9 @@ class ExecuteCommandSchema(BaseModel):
 | Rule | Implementation | Example |
 |------|---------------|---------|
 | Type checking | Pydantic field types | `str` not `int` |
-| Length limits | `min_length`, `max_length` | Query max 500 chars |
-| Pattern matching | Regex validators | Email format |
-| Value ranges | `ge`, `le` constraints | Temperature 0.0-2.0 |
-| Custom validators | `@validator` methods | Dangerous pattern detection |
+| Length limits | `max_lines`, `max_results` | Query max 5 results |
+| Value ranges | `ge`, `le` constraints | Timeout 1-300 seconds |
+| Custom validators | `@field_validator` methods | Module whitelist |
 
 ### Layer 3: Sandboxed Execution
 
@@ -192,6 +200,74 @@ def validate_path(requested: str, base: Path) -> Path:
     return resolved
 ```
 
+## SecurityPolicy Class
+
+The [`SecurityPolicy`](src/c_e_h/security.py:57) class is the central security component in `src/c_e_h/security.py`. It provides path validation, command whitelisting, and input sanitization.
+
+### Constructor
+
+```python
+SecurityPolicy(
+    allowed_commands: Optional[Set[str]] = None,
+    default_max_length: int = 10000,
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `allowed_commands` | `Set[str]` | `ALLOWED_COMMANDS` | Custom whitelist of allowed command base names |
+| `default_max_length` | `int` | `10000` | Default maximum input length in characters |
+
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| [`safe_path(base_dir, user_path)`](src/c_e_h/security.py:92) | `str` | Resolve user path relative to base, raise `PathTraversalError` if escaped |
+| [`safe_path_any(allowed_bases, user_path)`](src/c_e_h/security.py:128) | `str` | Check if resolved path is within any allowed base directory |
+| [`validate_command(command)`](src/c_e_h/security.py:159) | `str` | Validate base command against whitelist, raise `CommandNotAllowedError` |
+| [`sanitize_input(text, max_length)`](src/c_e_h/security.py:212) | `str` | Enforce max length, truncate or raise `InputValidationError` |
+| [`log_security_event(event_type, details)`](src/c_e_h/security.py:254) | `None` | Log security event at WARNING level |
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `allowed_commands` | `Set[str]` | Frozen set of allowed command base names |
+| `default_max_length` | `int` | Default maximum input length |
+
+### Exception Classes
+
+| Exception | Inherits | Raised When |
+|-----------|----------|-------------|
+| [`SecurityError`](src/c_e_h/security.py:33) | `Exception` | Base exception for all security violations |
+| [`PathTraversalError`](src/c_e_h/security.py:39) | `SecurityError` | Path escapes allowed base directory |
+| [`CommandNotAllowedError`](src/c_e_h/security.py:45) | `SecurityError` | Command not in whitelist or not in PATH |
+| [`InputValidationError`](src/c_e_h/security.py:51) | `SecurityError` | Input exceeds max_length |
+
+### Module-Level Convenience Functions
+
+These functions use a global `SecurityPolicy` instance (lazy-initialized):
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| [`safe_path()`](src/c_e_h/security.py:299) | `(base_dir: str, user_path: str) -> str` | Path traversal prevention |
+| [`safe_path_any()`](src/c_e_h/security.py:316) | `(allowed_bases: list[str], user_path: str) -> str` | Multi-base path validation |
+| [`validate_command()`](src/c_e_h/security.py:332) | `(command: str) -> str` | Command whitelist enforcement |
+| [`sanitize_input()`](src/c_e_h/security.py:347) | `(text: Any, max_length: Optional[int] = None) -> str` | Input length enforcement |
+| [`log_security_event()`](src/c_e_h/security.py:363) | `(event_type: str, details: Optional[Dict[str, Any]]) -> None` | Security event logging |
+
+### Default Command Whitelist
+
+```python
+ALLOWED_COMMANDS: frozenset = frozenset({
+    "ls", "cat", "grep", "find", "git", "cp", "mv", "rm", "mkdir", "echo",
+})
+```
+
+Only these base commands are permitted. The whitelist is enforced by checking:
+1. The base command name (first token, basename only) is in `ALLOWED_COMMANDS`
+2. The executable exists in PATH via `shutil.which()`
+
 ## Permission System
 
 ### Permission Modes
@@ -259,21 +335,20 @@ class PermissionManager:
 ### Module Import Security
 
 ```python
-ALLOWED_MODULES = frozenset({
+# From src/c_e_h/tools.py:964
+ALLOWED_IMPORT_MODULES: frozenset = frozenset({
     # Standard library
-    "os", "sys", "json", "pathlib", "subprocess", "re",
-    "datetime", "typing", "collections", "itertools",
-    "math", "string", "io", "tempfile", "shutil",
-    "http", "urllib", "email", "html", "xml",
+    "os", "sys", "json", "re", "math", "datetime", "pathlib", "collections",
+    "itertools", "functools", "typing", "subprocess", "shutil", "glob",
+    "hashlib", "logging", "argparse", "textwrap", "string", "io",
+    "csv", "html", "xml", "urllib", "http", "email", "copy",
+    "time", "calendar", "random", "secrets",
     # Approved third-party
-    "pydantic", "rich", "typer",
+    "pydantic", "rich", "yaml", "structlog", "typer",
 })
-
-def validate_import(module_name: str) -> bool:
-    """Check if module is allowed for import."""
-    base_module = module_name.split(".")[0]
-    return base_module in ALLOWED_MODULES
 ```
+
+Module imports are validated by extracting the base module name (first component of dotted path) and checking against `ALLOWED_IMPORT_MODULES`. The `import_module` tool in [`tools.py`](src/c_e_h/tools.py:976) enforces this whitelist.
 
 ## Sandboxing
 

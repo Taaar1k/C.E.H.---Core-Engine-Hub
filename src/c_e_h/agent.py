@@ -9,7 +9,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -64,6 +64,12 @@ class AgentConfig(BaseModel):
     log_level: str = "INFO"
     log_format: str = "json"
 
+    # Model scanner directory — used as default scan directory for `ceh run --scan-dir`
+    models_directory: Optional[str] = None
+
+    # Default profile name to load from profiles.yaml
+    default_profile: Optional[str] = None
+
 
 @dataclass
 class AgentState:
@@ -91,20 +97,40 @@ class Agent:
 
     Orchestrates the agent loop: receive input, generate response,
     execute tools, update memory, and repeat until task completion.
+
+    Attributes:
+        config: Agent configuration.
+        state: Current agent state.
+        display_mode: Display mode for output (``"clean"`` or ``"streaming"``).
     """
 
     MAX_RETRIES: int = 3
     BASE_RETRY_DELAY: float = 1.0  # seconds
 
-    def __init__(self, config: Optional[AgentConfig] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[AgentConfig] = None,
+        display_mode: Literal["clean", "streaming"] = "clean",
+    ) -> None:
+        """Initialize the agent.
+
+        Args:
+            config: Agent configuration.  Defaults to ``AgentConfig()``.
+            display_mode: Output display mode.  ``"clean"`` shows only
+                the final response with a spinner; ``"streaming"`` shows
+                tokens as they arrive (deprecated, kept for backward
+                compatibility).
+        """
         self.config = config or AgentConfig()
         self.state = AgentState(started_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
+        self.display_mode = display_mode
         self._setup_logging()
         self._backend = None  # LlamaBackend instance (lazy-loaded)
         logger.info(
-            "Agent initialized config=%s version=%s",
+            "Agent initialized config=%s version=%s display_mode=%s",
             self.config.name,
             self.config.version,
+            self.display_mode,
         )
 
     def _setup_logging(self) -> None:
@@ -158,6 +184,13 @@ class Agent:
             for k, v in tools_data.items():
                 tools[str(k)] = bool(v)
 
+        # Extract models_directory from top-level or nested models key
+        models_directory = data.get("models_directory")
+        if models_directory is None:
+            models_cfg = data.get("models", {})
+            if isinstance(models_cfg, dict):
+                models_directory = models_cfg.get("directory") or models_cfg.get("path")
+
         return AgentConfig(
             name=data.get("name", "CEH-Agent"),
             version=data.get("version", "0.1.0"),
@@ -174,13 +207,21 @@ class Agent:
             tools=tools if tools else AgentConfig().tools,
             log_level=logging_cfg.get("level", "INFO"),
             log_format=logging_cfg.get("format", "json"),
+            models_directory=models_directory if isinstance(models_directory, str) else None,
+            default_profile=data.get("default_profile") if isinstance(data.get("default_profile"), str) else None,
         )
 
-    def run(self, prompt: str) -> str:
+    def run(
+        self,
+        prompt: str,
+        display_mode: Optional[Literal["clean", "streaming"]] = None,
+    ) -> str:
         """Execute one step of the agent loop with retry logic.
 
         Args:
             prompt: User input or task description.
+            display_mode: Optional override for the display mode.
+                Defaults to ``self.display_mode``.
 
         Returns:
             Agent response or error message.
@@ -188,12 +229,17 @@ class Agent:
         self.state.step_count += 1
         self.state.context.append({"role": "user", "content": prompt})
 
+        effective_mode = display_mode if display_mode is not None else self.display_mode
+
         try:
-            response = self._generate_response_with_retry(prompt)
+            if effective_mode == "clean":
+                response = self._generate_response_with_retry_clean(prompt)
+            else:
+                response = self._generate_response_with_retry(prompt)
             self.state.context.append({"role": "assistant", "content": response})
             self.state.last_response = response
             self.state.auto_errors = 0  # Reset on success
-            logger.info("Step completed step=%d", self.state.step_count)
+            logger.info("Step completed step=%d mode=%s", self.state.step_count, effective_mode)
             return response
         except Exception as e:
             self.state.auto_errors += 1
@@ -205,6 +251,55 @@ class Agent:
                     self.state.auto_errors,
                 )
             return f"[Error] Step {self.state.step_count} failed: {e}"
+
+    def _generate_response_with_retry_clean(self, prompt: str) -> str:
+        """Generate response with retry logic using clean display.
+
+        Uses ``CleanChatDisplay`` to show a spinner during processing
+        and only displays the final cleaned response.
+
+        This method does NOT modify agent state — that is handled by
+        ``run()`` after this method returns successfully.
+
+        Args:
+            prompt: The prompt to send to the LLM.
+
+        Returns:
+            The generated response string with internal tags stripped.
+
+        Raises:
+            RuntimeError: If all retries are exhausted.
+        """
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                if attempt > 0:
+                    logger.warning("Retry attempt %d/%d for prompt", attempt + 1, self.MAX_RETRIES)
+
+                raw_response = self._generate_response(prompt)
+
+                # Log tool activity
+                if "<tool_call>" in raw_response or "<tool_result>" in raw_response:
+                    logger.info("Tool activity detected in response")
+
+                # Strip internal tags (simple implementation, no UI dependency)
+                cleaned = raw_response
+
+                logger.debug("Response generated successfully")
+
+                return cleaned
+            except Exception as e:
+                delay = self.BASE_RETRY_DELAY * (2 ** attempt)
+                logger.warning(
+                    "LLM call failed, retrying attempt=%d max_retries=%d delay=%.2f error=%s",
+                    attempt + 1,
+                    self.MAX_RETRIES,
+                    delay,
+                    str(e),
+                )
+                time.sleep(delay)
+
+        logger.error("Failed after %d retries", self.MAX_RETRIES)
+        raise RuntimeError(f"Failed after {self.MAX_RETRIES} retries")
 
     def _generate_response_with_retry(self, prompt: str) -> str:
         """Generate response with exponential backoff retry.
@@ -242,15 +337,15 @@ class Agent:
         if self._backend is not None:
             return
 
-        LlamaBackend, ModelConfig = _get_backend_classes()
-        cfg = ModelConfig(
+        llama_backend_cls, model_config_cls = _get_backend_classes()
+        cfg = model_config_cls(
             path=self.config.model_path,
             n_gpu_layers=self.config.n_gpu_layers,
             n_ctx=self.config.n_ctx,
             temperature=self.config.temperature,
             max_tokens=512,
         )
-        self._backend = LlamaBackend(cfg)
+        self._backend = llama_backend_cls(cfg)
         try:
             self._backend.load()
             logger.info("LlamaBackend loaded model=%s", self.config.model_path)

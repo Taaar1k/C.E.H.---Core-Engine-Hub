@@ -155,8 +155,8 @@ class LlamaBackend:
         """
         try:
             from llama_cpp import Llama
-        except ImportError:
-            raise BackendError("llama-cpp-python not installed")
+        except ImportError as exc:
+            raise BackendError("llama-cpp-python not installed") from exc
 
         model_path = Path(self.config.path)
         if not model_path.exists():

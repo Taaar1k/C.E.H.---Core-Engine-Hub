@@ -282,7 +282,7 @@ class TestSessionManagerIntegration:
         # Import here to avoid circular imports at module level
         from c_e_h.session_manager import SessionManager
 
-        sm = SessionManager(db_path=str(tmp_db))
+        _sm = SessionManager(db_path=str(tmp_db))
 
         # Verify migrations were applied
         version = get_schema_version(tmp_db)
@@ -304,7 +304,7 @@ class TestSessionManagerIntegration:
 
         from c_e_h.session_manager import SessionManager
 
-        sm = SessionManager(db_path=str(db_path))
+        _sm = SessionManager(db_path=str(db_path))
 
         assert db_path.exists()
         version = get_schema_version(db_path)
