@@ -42,7 +42,7 @@ All tool arguments are validated using **Pydantic models** before execution:
 class ExecuteCommandSchema(BaseModel):
     command: str = Field(..., description="Command to execute")
     args: list[str] = Field(default=[], description="Command arguments")
-    
+
     @validator("command")
     def validate_command(cls, v):
         # Block dangerous commands
@@ -76,13 +76,13 @@ def execute_tool(command: str, args: list[str], cwd: str) -> dict:
     full_cmd = f"{command} {' '.join(args)}"
     if any(p in full_cmd for p in dangerous_patterns):
         raise SecurityError(f"Blocked dangerous command: {full_cmd}")
-    
+
     # Sanitize environment
     safe_env = {
         k: v for k, v in os.environ.items()
         if k in ("PATH", "HOME", "LANG", "TERM", "GITHUB_TOKEN")
     }
-    
+
     # Execute with timeout
     result = subprocess.run(
         [command] + args,

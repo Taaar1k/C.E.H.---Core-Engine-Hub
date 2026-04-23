@@ -79,8 +79,8 @@ Multi-Agent Swarm Mode (optional)
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/c-e-h.git
-cd c-e-h
+git clone https://github.com/your-org/ceh.git
+cd ceh
 
 # Create virtual environment with uv
 uv venv
@@ -155,10 +155,10 @@ xcode-select --install
 
 ```bash
 # Start the agent with a model
-c-e-h run --model ./models/llama-3-8b.Q4_K_M.gguf
+ceh run --model ./models/llama-3-8b.Q4_K_M.gguf
 
 # Or use the interactive CLI
-c-e-h interactive --model ./models/llama-3-8b.Q4_K_M.gguf
+ceh interactive --model ./models/llama-3-8b.Q4_K_M.gguf
 ```
 
 ### Configuration
@@ -273,7 +273,7 @@ project/
 ## 📁 Project Structure
 
 ```
-c-e-h/
+ceh/
 ├── pyproject.toml          # Project configuration & dependencies
 ├── uv.lock                 # Deterministic dependency lock file
 ├── README.md               # This file
@@ -307,13 +307,34 @@ c-e-h/
 
 ---
 
+## 📚 Documentation
+
+Comprehensive documentation is available in the [`DOCS/`](DOCS/) directory:
+
+| Document | Description |
+|----------|-------------|
+| [API Reference](DOCS/API/) | Complete API documentation for all modules |
+| [CLI Reference](DOCS/API/cli.md) | Command-line interface guide |
+| [Agent API](DOCS/API/agent.md) | Core agent class documentation |
+| [Memory System](DOCS/API/memory.md) | Three-tier memory architecture |
+| [Tool Registry](DOCS/API/tools.md) | Tool framework and security |
+| [Llama Backend](DOCS/API/llama_backend.md) | llama.cpp integration |
+| [Developer Guide](DOCS/DEVELOPER_GUIDE.md) | Setup, contribution, and extension guide |
+| [Architecture](DOCS/ARCHITECTURE.md) | System design and component diagrams |
+| [Security](DOCS/SECURITY.md) | Security model and best practices |
+| [Contributing](DOCS/CONTRIBUTING.md) | How to contribute to C.E.H. |
+
+**Quick links**: [`CHANGELOG.md`](CHANGELOG.md) · [`RELEASE_NOTES.md`](RELEASE_NOTES.md) · [`SECURITY.md`](SECURITY.md)
+
+---
+
 ## 🧪 Development
 
 ### Diagnostic Command
 
 ```bash
 # Run system diagnostics
-$ c-e-h doctor
+$ ceh doctor
 ✅ Python 3.11.7
 ✅ llama-cpp-python 0.2.78 (GPU: Metal)
 ✅ GGUF model: llama-3-8b.Q4_K_M.gguf (14.2 GB)
@@ -384,7 +405,7 @@ def create_issue(repo: str, title: str, body: str) -> ToolResult:
     token = os.getenv("GITHUB_TOKEN")
     if not token:
         return ToolResult(error="GITHUB_TOKEN not configured")
-    
+
     # Implementation via PyGithub
     # ...
     return ToolResult(success=True, data={"url": f"https://github.com/{repo}/issues/{number}"})
